@@ -1,72 +1,70 @@
+## Problem 1 question 1
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
+import torch.optim as optim
+import timeit
+
+from ptflops import get_model_complexity_info
 
 dataset = pd.read_csv('/content/Housing.csv')
-X = dataset.iloc[:, 1:].values
+X = dataset.iloc[:,[ 1,2,3,4,10]].values
 y = dataset.iloc[:, 0].values
-
-print (X)
-X.shape
-
-print (y)
-y.shape
-
-from sklearn.compose  import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
-
-#encoder ->onehotencoder->指定操作的列数
-#remainder ='passthrough', 除了被选中的列数以外都保持原样
-
-ct=ColumnTransformer(transformers=[('encoder',OneHotEncoder(),[4,5,6,7,8,10,11])], remainder='passthrough')
-X= ct.fit_transform(X)
-
-print(X.dtype)
-X
+X = torch.tensor(X).type(torch.FloatTensor) # <1>
+y = torch.tensor(y).type(torch.FloatTensor) # <1>
 
 from sklearn.model_selection import train_test_split
-X_train, X_validation, y_train, y_validation = train_test_split(X, y, test_size = 0.2, random_state = 0)
+t_X_train, t_X_val, t_y_train, t_y_val = train_test_split(X, y, test_size = 0.2, random_state = 0)
 
-
-print(X_validation.shape)
-X_validation
-
-y_train = torch.tensor(y_train).unsqueeze(1) # <1>
-print(y_train.shape)
-y_train 
-
-y_validation = torch.tensor(y_validation).unsqueeze(1)
-print(y_validation .shape)
-y_validation 
+t_y_train= 0.000001 * t_y_train
+t_y_val=1e-6*t_y_val
 
 import torch.nn as nn
 
 seq_model = nn.Sequential(
-            nn.Linear(1, 8), # <1>
+            nn.Linear(5, 8), # <1>
             nn.Tanh(),
             nn.Linear(8, 1)) # <2>
 seq_model
 
+for name, param in seq_model.named_parameters():
+    print(name, param.shape)
+
+from collections import OrderedDict
+
+seq_model = nn.Sequential(OrderedDict([
+    ('hidden_linear', nn.Linear(5, 8)),
+    ('hidden_activation', nn.Tanh()),
+    ('output_linear', nn.Linear(8, 1))
+]))
+
+seq_model
+start = timeit.default_timer()
 def training_loop(n_epochs, optimizer, model, loss_fn, t_u_train, t_u_val,
                   t_c_train, t_c_val):
     for epoch in range(1, n_epochs + 1):
-        t_p_train = model(t_u_train) # <1>
-        loss_train = loss_fn(t_p_train, t_c_train)
+        
+        t_p_train = model(t_X_train) # <1>
+        loss_train = loss_fn(t_p_train, t_y_train)
 
-        t_p_val = model(t_u_val) # <1>
-        loss_val = loss_fn(t_p_val, t_c_val)
+        t_p_val = model(t_X_val) # <1>
+        loss_val = loss_fn(t_p_val, t_y_val)
+        
         
         optimizer.zero_grad()
         loss_train.backward() # <2>
         optimizer.step()
-
-        if epoch == 200 or epoch % 200 == 0:
+        
+      
+        
+        if epoch == 200 or epoch % 10 == 0:
             print(f"Epoch {epoch}, Training loss {loss_train.item():.4f},"
                   f" Validation loss {loss_val.item():.4f}")
-                  
+            
 import torch.optim as optim
 
+start = timeit.default_timer()
 optimizer = optim.SGD(seq_model.parameters(), lr=1e-3) # <1>
 
 training_loop(
@@ -74,8 +72,331 @@ training_loop(
     optimizer = optimizer,
     model = seq_model,
     loss_fn = nn.MSELoss(),
-    t_u_train = X_train,
-    t_u_val = X_validation, 
-    t_c_train = y_train,
-    t_c_val = y_validation)
-    
+    t_u_train = t_X_train,
+    t_u_val = t_X_val, 
+    t_c_train = t_y_train,
+    t_c_val = t_y_val)
+stop = timeit.default_timer()
+time = stop - start
+print(f" time cost (ms) {time*1000}")
+macs, params = get_model_complexity_info(seq_model,(436, 5),as_strings=True,
+                                           print_per_layer_stat=True, verbose=True)
+## Problem 1 question 2
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import torch
+import torch.optim as optim
+import timeit
+
+dataset = pd.read_csv('/content/Housing.csv')
+X = dataset.iloc[:,[ 1,2,3,4,10]].values
+y = dataset.iloc[:, 0].values
+X = torch.tensor(X).type(torch.FloatTensor) # <1>
+y = torch.tensor(y).type(torch.FloatTensor) # <1>
+
+from sklearn.model_selection import train_test_split
+t_X_train, t_X_val, t_y_train, t_y_val = train_test_split(X, y, test_size = 0.2, random_state = 0)
+
+t_y_train= 0.000001 * t_y_train
+t_y_val=1e-6*t_y_val
+
+import torch.nn as nn
+
+seq_model = nn.Sequential(
+            nn.Linear(5, 8), # <1>
+            nn.Tanh(),
+            nn.Linear(8, 100),
+            nn.Hardtanh(),
+            nn.Linear(100, 200),
+            nn.ReLU(),
+            nn.Linear(200, 1)) # <2>
+seq_model
+
+from collections import OrderedDict
+
+
+seq_model
+start = timeit.default_timer()
+def training_loop(n_epochs, optimizer, model, loss_fn, t_u_train, t_u_val,
+                  t_c_train, t_c_val):
+    for epoch in range(1, n_epochs + 1):
+        
+        t_p_train = model(t_X_train) # <1>
+        loss_train = loss_fn(t_p_train, t_y_train)
+
+        t_p_val = model(t_X_val) # <1>
+        loss_val = loss_fn(t_p_val, t_y_val)
+        
+        
+        optimizer.zero_grad()
+        loss_train.backward() # <2>
+        optimizer.step()
+        
+      
+        
+        if epoch == 200 or epoch % 10 == 0:
+            print(f"Epoch {epoch}, Training loss {loss_train.item():.4f},"
+                  f" Validation loss {loss_val.item():.4f}")
+            
+import torch.optim as optim
+
+start = timeit.default_timer()
+optimizer = optim.SGD(seq_model.parameters(), lr=1e-3) # <1>
+
+training_loop(
+    n_epochs = 200, 
+    optimizer = optimizer,
+    model = seq_model,
+    loss_fn = nn.MSELoss(),
+    t_u_train = t_X_train,
+    t_u_val = t_X_val, 
+    t_c_train = t_y_train,
+    t_c_val = t_y_val)
+stop = timeit.default_timer()
+time = stop - start
+print(f" time cost (ms) {time*1000}")
+
+## Problem 2 question 1
+%matplotlib inline
+from matplotlib import pyplot as plt
+import numpy as np
+import torch
+import timeit
+
+torch.set_printoptions(edgeitems=2, linewidth=75)
+torch.manual_seed(123)
+
+from torchvision import datasets
+data_path = '../data-unversioned/p1ch7/'
+cifar10 = datasets.CIFAR10(data_path, train=True, download=True) # <1>
+cifar10_val = datasets.CIFAR10(data_path, train=False, download=True) # <2>
+
+
+from torchvision import transforms
+
+transformed_cifar10 = datasets.CIFAR10(
+    data_path, train=True, download=False,
+    transform=transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4915, 0.4823, 0.4468),
+                             (0.2470, 0.2435, 0.2616))
+    ]))
+
+
+transformed_cifar10_val = datasets.CIFAR10(
+    data_path, train=False, download=False,
+    transform=transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4915, 0.4823, 0.4468),
+                             (0.2470, 0.2435, 0.2616))
+    ]))
+
+
+###########################################################################################################
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+train_loader = torch.utils.data.DataLoader(transformed_cifar10 , batch_size=64, shuffle=True)
+vailidation_loader= torch.utils.data.DataLoader(transformed_cifar10_val, batch_size=64, shuffle=True)
+
+model = nn.Sequential(
+            nn.Linear(3072, 512),
+            nn.Tanh(),
+            nn.Linear(512, 10),
+            nn.LogSoftmax(dim=1))
+
+learning_rate = 1e-2
+
+optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+
+loss_fn = nn.NLLLoss()
+
+n_epochs = 100
+
+start = timeit.default_timer()
+
+for epoch in range(n_epochs):
+    for imgs, labels in train_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        loss = loss_fn(outputs, labels)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    print("Epoch: %d, Loss: %f" % (epoch, float(loss))) 
+
+stop = timeit.default_timer()
+time = stop - start
+print(f" time cost(training) (ms) {time*1000}")
+
+
+start = timeit.default_timer()
+for epoch in range(n_epochs):
+    for imgs, labels in vailidation_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        loss = loss_fn(outputs, labels)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    print("Epoch(v): %d, Loss: %f" % (epoch, float(loss))) 
+
+stop = timeit.default_timer()
+time = stop - start
+print(f" time cost(validation ) (ms) {time*1000}")
+
+train_loader = torch.utils.data.DataLoader(transformed_cifar10, batch_size=64, shuffle=False)
+
+correct = 0
+total = 0
+
+with torch.no_grad():
+    for imgs, labels in train_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        _, predicted = torch.max(outputs, dim=1)
+        total += labels.shape[0]
+        correct += int((predicted == labels).sum())
+        
+print("Accuracy: %f" % (correct / total))
+
+val_loader = torch.utils.data.DataLoader(transformed_cifar10_val, batch_size=64, shuffle=False)
+
+correct = 0
+total = 0
+
+with torch.no_grad():
+    for imgs, labels in val_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        _, predicted = torch.max(outputs, dim=1)
+        total += labels.shape[0]
+        correct += int((predicted == labels).sum())
+        
+print("Accuracy: %f" % (correct / total))
+
+## Problem 2 question 2
+%matplotlib inline
+from matplotlib import pyplot as plt
+import numpy as np
+import torch
+import timeit
+
+torch.set_printoptions(edgeitems=2, linewidth=75)
+torch.manual_seed(123)
+
+from torchvision import datasets
+data_path = '../data-unversioned/p1ch7/'
+cifar10 = datasets.CIFAR10(data_path, train=True, download=True) # <1>
+cifar10_val = datasets.CIFAR10(data_path, train=False, download=True) # <2>
+
+
+from torchvision import transforms
+
+transformed_cifar10 = datasets.CIFAR10(
+    data_path, train=True, download=False,
+    transform=transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4915, 0.4823, 0.4468),
+                             (0.2470, 0.2435, 0.2616))
+    ]))
+
+
+transformed_cifar10_val = datasets.CIFAR10(
+    data_path, train=False, download=False,
+    transform=transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4915, 0.4823, 0.4468),
+                             (0.2470, 0.2435, 0.2616))
+    ]))
+
+
+###########################################################################################################
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+train_loader = torch.utils.data.DataLoader(transformed_cifar10 , batch_size=64, shuffle=True)
+vailidation_loader= torch.utils.data.DataLoader(transformed_cifar10_val, batch_size=64, shuffle=True)
+
+model = nn.Sequential(
+            nn.Linear(3072, 1024),
+            nn.Tanh(),
+            nn.Linear(1024, 512),
+            nn.Tanh(),
+            nn.Linear(512, 10),
+            nn.LogSoftmax(dim=1))
+
+learning_rate = 1e-2
+
+optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+
+loss_fn = nn.NLLLoss()
+
+n_epochs = 100
+
+start = timeit.default_timer()
+
+for epoch in range(n_epochs):
+    for imgs, labels in train_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        loss = loss_fn(outputs, labels)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    print("Epoch: %d, Loss: %f" % (epoch, float(loss))) 
+
+stop = timeit.default_timer()
+time = stop - start
+print(f" time cost(training) (ms) {time*1000}")
+
+
+start = timeit.default_timer()
+for epoch in range(n_epochs):
+    for imgs, labels in vailidation_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        loss = loss_fn(outputs, labels)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    print("Epoch(v): %d, Loss: %f" % (epoch, float(loss))) 
+
+stop = timeit.default_timer()
+time = stop - start
+print(f" time cost(validation ) (ms) {time*1000}")
+
+train_loader = torch.utils.data.DataLoader(transformed_cifar10, batch_size=64, shuffle=False)
+
+correct = 0
+total = 0
+
+with torch.no_grad():
+    for imgs, labels in train_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        _, predicted = torch.max(outputs, dim=1)
+        total += labels.shape[0]
+        correct += int((predicted == labels).sum())
+        
+print("Accuracy: %f" % (correct / total))
+
+val_loader = torch.utils.data.DataLoader(transformed_cifar10_val, batch_size=64, shuffle=False)
+
+correct = 0
+total = 0
+
+with torch.no_grad():
+    for imgs, labels in val_loader:
+        outputs = model(imgs.view(imgs.shape[0], -1))
+        _, predicted = torch.max(outputs, dim=1)
+        total += labels.shape[0]
+        correct += int((predicted == labels).sum())
+        
+print("Accuracy: %f" % (correct / total))
